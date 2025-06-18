@@ -121,7 +121,6 @@ class Minerva:
         markup = self._answer_mode_kb.as_markup()
         await message.answer("Выберите режим ответа:", reply_markup=markup)
 
-
     def _get_user_full_name(self, message: Message) -> Optional[str]:
         """
         Safely retrieves the user's full name or username.

@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  embedder-server:
+  embedder_server:
     build:
-      context: ./embedder-server
+      context: ./embedder_server
       dockerfile: dockerfile
     container_name: embedder_server
     ports:
@@ -11,7 +11,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./embedder-server:/app
+      - ./embedder_server:/app
     deploy:
       resources:
         reservations:
@@ -26,9 +26,9 @@ services:
       - ml_network
     restart: unless-stopped
 
-  api-server:
+  api_server:
     build:
-      context: ./api-server  
+      context: ./api_server  
       dockerfile: dockerfile
     container_name: api_server
     ports:
@@ -36,9 +36,9 @@ services:
     env_file:
       - .env
     volumes:
-      - ./api-server:/app
+      - ./api_server:/app
     depends_on:
-      - embedder-server
+      - embedder_server
     deploy:
       resources:
         reservations:
@@ -53,18 +53,18 @@ services:
       - ml_network
     restart: unless-stopped
 
-  telegram-bot:
+  telegram_bot:
     build:
-      context: ./telegram-bot
+      context: ./telegram_bot
       dockerfile: dockerfile
     container_name: telegram_bot
     env_file:
       - .env
     volumes:
-      - ./telegram-bot:/app
-      - ./telegram-bot/minerva.db:/app/minerva.db
+      - ./telegram_bot:/app
+      - ./telegram_bot/minerva.db:/app/minerva.db
     depends_on:
-      - api-server
+      - api_server
     networks:
       - ml_network
     restart: unless-stopped
