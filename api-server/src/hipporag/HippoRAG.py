@@ -303,72 +303,20 @@ class HippoRAG:
         queries_solutions, all_response_message, all_metadata = await self.qa(queries)
         return queries_solutions, all_response_message, all_metadata
 
-    # async def retrieve(self,
-    #              queries: List[str],
-    #              num_to_retrieve: int = None,
-    #             ) -> List[QuerySolution] | Tuple[List[QuerySolution], Dict]:
-    #     """
-    #     Retrieves relevant documents for a list of queries using a multi-stage process.
-
-    #     The process includes:
-    #     1. Fact Retrieval: Find facts semantically similar to the query.
-    #     2. Fact Reranking (Recognition Memory): Use an LLM to rerank and select the most relevant facts.
-    #     3. Graph Search: Use Personalized PageRank (PPR) on the knowledge graph, personalized
-    #        with scores from selected facts and dense passage retrieval, to rank documents.
-
-    #     :param queries: A list of query strings.
-    #     :param num_to_retrieve: The number of top documents to retrieve. Defaults to config.
-    #     :return: A list of `QuerySolution` objects, each containing the retrieved documents.
-    #     """
-    #     retrieve_start_time = time.time()  # Record start time
-
-    #     if num_to_retrieve is None:
-    #         num_to_retrieve = self.global_config.retrieval_top_k
-
-    #     if not self.ready_to_retrieve:
-    #         self.prepare_retrieval_objects()
-
-    #     self.get_query_embeddings(queries)
-
-    #     retrieval_results = []
-    #     rerank_time, all_retrieval_time = 0, 0
-    #     for q_idx, query in tqdm(enumerate(queries), desc="Retrieving", total=len(queries)):
-    #         rerank_start = time.time()
-    #         query_fact_scores = self.get_fact_scores(query)
-    #         top_k_fact_indices, top_k_facts, rerank_log = await self.rerank_facts(query, query_fact_scores)
-    #         rerank_end = time.time()
-
-    #         rerank_time += rerank_end - rerank_start
-
-    #         if len(top_k_facts) == 0:
-    #             logger.info('No facts found after reranking, return DPR results')
-    #             sorted_doc_ids, sorted_doc_scores = self.dense_passage_retrieval(query)
-    #         else:
-    #             sorted_doc_ids, sorted_doc_scores = self.graph_search_with_fact_entities(query=query,
-    #                                                                                      link_top_k=self.global_config.linking_top_k,
-    #                                                                                      query_fact_scores=query_fact_scores,
-    #                                                                                      top_k_facts=top_k_facts,
-    #                                                                                      top_k_fact_indices=top_k_fact_indices,
-    #                                                                                      passage_node_weight=self.global_config.passage_node_weight)
-            
-    #         top_k_docs = [self.chunk_embedding_store.get_rows_content([self.passage_node_keys[idx]]) for idx in sorted_doc_ids[:num_to_retrieve]]
-    #         retrieval_results.append(QuerySolution(question=query, docs=top_k_docs, doc_scores=sorted_doc_scores[:num_to_retrieve]))
-
-    #     retrieve_end_time = time.time()
-
-    #     all_retrieval_time += retrieve_end_time - retrieve_start_time
-
-    #     logger.info(f"Total Retrieval Time {all_retrieval_time:.2f}s")
-    #     logger.info(f"Total Recognition Memory Time {rerank_time:.2f}s")
-
-    #     return retrieval_results
-
     async def retrieve(self,
                  queries: List[str],
                  num_to_retrieve: int = None,
                 ) -> List[QuerySolution] | Tuple[List[QuerySolution], Dict]:
         """
         Retrieves relevant documents for a list of queries using a multi-stage process with parallel execution.
+
+        This method performs document retrieval through a sophisticated pipeline that includes
+        query embedding generation, fact scoring, reranking, and graph-based search. The process
+        runs concurrently for multiple queries to optimize performance.
+
+        :param queries: A list of query strings to retrieve documents for.
+        :param num_to_retrieve: Number of top documents to retrieve per query. If None, uses global config value.
+        :return: A list of `QuerySolution` objects, each containing a query with its retrieved documents and scores.
         """
         retrieve_start_time = time.time()
 
@@ -443,21 +391,6 @@ class HippoRAG:
         logger.info(f"Total Recognition Memory Time {rerank_time:.2f}s")
 
         return retrieval_results
-
-    def _dense_passage_retrieval_wrapper(self, query: str):
-        """Wrapper для dense_passage_retrieval для использования в ProcessPoolExecutor"""
-        return self.dense_passage_retrieval(query)
-
-    def _graph_search_wrapper(self, query: str, query_fact_scores, top_k_facts, top_k_fact_indices):
-        """Wrapper для graph_search_with_fact_entities для использования в ProcessPoolExecutor"""
-        return self.graph_search_with_fact_entities(
-            query=query,
-            link_top_k=self.global_config.linking_top_k,
-            query_fact_scores=query_fact_scores,
-            top_k_facts=top_k_facts,
-            top_k_fact_indices=top_k_fact_indices,
-            passage_node_weight=self.global_config.passage_node_weight
-        )
 
     async def qa(self, queries: List[QuerySolution]) -> Tuple[List[QuerySolution], List[str], List[Dict]]:
         """
