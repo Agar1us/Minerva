@@ -1,0 +1,6 @@
+pydub
+httpx
+fireducks
+aiogram
+fire
+sqlalchemy

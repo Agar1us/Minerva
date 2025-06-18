@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  embedder-server:
+    build:
+      context: ./embedder-server
+      dockerfile: dockerfile
+    container_name: embedder_server
+    ports:
+      - "8888:8888"
+    env_file:
+      - .env
+    volumes:
+      - ./embedder-server:/app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    networks:
+      - ml_network
+    restart: unless-stopped
+
+  api-server:
+    build:
+      context: ./api-server  
+      dockerfile: dockerfile
+    container_name: api_server
+    ports:
+      - "9875:9875"
+    env_file:
+      - .env
+    volumes:
+      - ./api-server:/app
+    depends_on:
+      - embedder-server
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    networks:
+      - ml_network
+    restart: unless-stopped
+
+  telegram-bot:
+    build:
+      context: ./telegram-bot
+      dockerfile: dockerfile
+    container_name: telegram_bot
+    env_file:
+      - .env
+    volumes:
+      - ./telegram-bot:/app
+      - ./telegram-bot/minerva.db:/app/minerva.db
+    depends_on:
+      - api-server
+    networks:
+      - ml_network
+    restart: unless-stopped
+
+networks:
+  ml_network:
+    driver: bridge
