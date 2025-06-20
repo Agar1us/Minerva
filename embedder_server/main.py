@@ -135,4 +135,5 @@ async def health_check() -> dict:
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8888)
+    host = '0.0.0.0' if os.getenv('IS_DOCKER_RUN') else '127.0.0.1'
+    uvicorn.run(app, host=host, port=8888)

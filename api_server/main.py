@@ -46,13 +46,13 @@ try:
     audio_processor = AudioProcessor()
 
     hipporag = HippoRAG(
-        save_dir=os.getenv('RAG_SAVE_DIR', 'outputs_tinkoff_short'),
-        llm_name=os.getenv('LLM_MODEL_NAME', 'deepseek-chat'),
-        llm_base_url=os.getenv('LLM_BASE_URL', 'https://api.deepseek.com'),
+        save_dir=os.getenv('RAG_SAVE_DIR'),
+        llm_name=os.getenv('LLM_MODEL_NAME'),
+        llm_base_url=os.getenv('LLM_BASE_URL'),
         llm_api_key=os.getenv('LLM_API_KEY'),
-        embedding_name=os.getenv('EMBEDDING_MODEL_NAME', 'deepvk/USER-bge-m3'),
-        embedding_base_url=os.getenv('EMBEDDING_BASE_URL', 'http://0.0.0.0:8888'),
-        embedding_api_key=os.getenv('EMBEDDING_API_KEY')
+        embedding_name=os.getenv('EMBEDDING_MODEL_NAME'),
+        embedding_base_url=os.getenv('EMBEDDING_BASE_URL'),
+        embedding_api_key=os.getenv('EMBEDDING_API_KEY', 'sk-custom_key')
     )
     logger.info("Models initialized successfully.")
 except Exception as e:
@@ -127,4 +127,5 @@ async def send_response(request_data: InputText):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=9875)
+    host = '0.0.0.0' if os.getenv('IS_DOCKER_RUN') else '127.0.0.1'
+    uvicorn.run(app, host=host, port=9875)

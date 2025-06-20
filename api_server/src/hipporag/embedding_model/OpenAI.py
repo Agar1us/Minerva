@@ -30,7 +30,7 @@ class OpenAIEmbeddingModel(BaseEmbeddingModel):
         super().__init__(global_config=global_config)
         self.embedding_model_name = global_config.embedding_name
 
-        logger.info(f"Initializing OpenAI client for model '{self.embedding_model_name}'...")
+        logger.info(f"Initializing OpenAI client for model {self.embedding_model_name}")
         try:
             self.client = OpenAI(
                 api_key=self.global_config.embedding_api_key,

@@ -5,9 +5,6 @@ import logging
 import fireducks.pandas as pd
 from typing import List
 
-from dotenv import load_dotenv
-load_dotenv()
-
 from src.hipporag.HippoRAG import HippoRAG
 
 # --- Setup Logging ---
@@ -30,7 +27,7 @@ def setup_rag_instance() -> HippoRAG:
         llm_api_key=os.getenv('LLM_API_KEY'),
         embedding_name=os.getenv('EMBEDDING_MODEL_NAME', 'deepvk/USER-bge-m3'),
         embedding_base_url=os.getenv('EMBEDDING_BASE_URL', 'http://127.0.0.1:8888'),
-        embedding_api_key=os.getenv('EMBEDDING_API_KEY')
+        embedding_api_key=os.getenv('EMBEDDING_API_KEY', "sk-your_custom_key")
     )
 
 def load_queries_from_file(filepath: str) -> List[str]:

@@ -231,7 +231,7 @@ class Minerva:
             logger.error(f"Ошибка сети при запросе к API для пользователя {user_id}: {exc}")
             await placeholder.edit_text(f"Ошибка сети. Не могу связаться с сервером. {exc}")
         except Exception:
-            logger.error(f"Общая ошибка при обработке контента для пользователя {user_id}: {e}")
+            logger.error(f"Общая ошибка при обработке контента для пользователя {user_id}")
             traceback.print_exc()
             await placeholder.edit_text(self.GENERAL_ERROR_MESSAGE)
 
@@ -386,8 +386,8 @@ def main():
     
     """
     bot_token = os.getenv("BOT_TOKEN")
-    rag_url = os.getenv("RAG_URL", "http://0.0.0.0:9875/request_processing/")
-    transcription_url = os.getenv("TRANSCRIPTION_URL", "http://0.0.0.0:9875/transcribe/")
+    rag_url = os.getenv("RAG_URL")
+    transcription_url = os.getenv("TRANSCRIPTION_URL")
     db_path = os.getenv('DB_PATH', 'minerva.db')
     if not bot_token:
         raise ValueError("BOT_TOKEN environment variable not set!")
