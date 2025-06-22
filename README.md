@@ -39,6 +39,7 @@ Minerva представляет из себя систему, ядром кот
 ## <h3 align="start"><a id="title4">Результаты</a></h3>
 
 ![](./images/results.png)
+
 В качестве judge модели была выбрана Claude Sonnet 3.7 и затем с помощью few-shot режима модель была выровнена под модель от кейсодержателя
 
 <p align="right">(<a href="#readme-top"><i>Вернуться к содержанию</i></a>)</p>
@@ -70,7 +71,6 @@ RAG_URL=http://127.0.0.1:9875/request_processing/
 TRANSCRIPTION_URL=http://127.0.0.1:9875/transcribe/
 ```
 
-Установка зависимостей
 Запуск RAG сервера
 ```
 cd api_server
@@ -92,6 +92,7 @@ python bot.py
 <p align="right">(<a href="#readme-top"><i>Вернуться к содержанию</i></a>)</p>
 
 ## <h3 align="start"><a id="title6">Документация</a></h3>
+Чтобы начать пользоваться документацией необходимо выполнить следующие команды:
 ```
 sudo apt-get install doxygen graphviz
 mkdir docs/doxygen
