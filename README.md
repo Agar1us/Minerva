@@ -61,36 +61,6 @@ docker-compose logs -f
 ```
 <p align="right">(<a href="#readme-top"><i>Вернуться к содержанию</i></a>)</p>
 
-### Ручная установка
-
-Необходимо поменять значения следующих переменных в .env файле:
-```
-IS_DOCKER_RUN=False
-EMBEDDING_BASE_URL=http://127.0.0.1:8888
-RAG_URL=http://127.0.0.1:9875/request_processing/
-TRANSCRIPTION_URL=http://127.0.0.1:9875/transcribe/
-```
-
-Запуск RAG сервера
-```
-cd api_server
-pip install -r requirements.txt
-python main.py
-```
-Запуск сервер для эмбеддера
-```
-cd embedder_server
-pip install -r requirements.txt
-python main.py
-```
-Запуск телеграмм бота
-```
-cd telegram_bot
-pip install -r requirements.txt
-python bot.py
-``` 
-<p align="right">(<a href="#readme-top"><i>Вернуться к содержанию</i></a>)</p>
-
 ## <h3 align="start"><a id="title6">Документация</a></h3>
 Чтобы начать пользоваться документацией необходимо выполнить следующие команды:
 ```
@@ -102,7 +72,6 @@ doxygen
 
 ## TODO
 
-* Извлечение PDF путем использования Docling + OCR
-* Использование векторной базы данных вместо sqlite
+* Сформировать интерфейс для удаленных векторных баз данных (на подобие Milvus) вместо sqlite
 
 <a name="readme-top"></a>
