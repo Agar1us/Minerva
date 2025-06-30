@@ -1,4 +1,6 @@
 import os
+import zipfile
+from pathlib import Path
 import shutil
 import tempfile
 import logging
@@ -52,7 +54,7 @@ try:
         llm_api_key=os.getenv('LLM_API_KEY'),
         embedding_name=os.getenv('EMBEDDING_MODEL_NAME'),
         embedding_base_url=os.getenv('EMBEDDING_BASE_URL'),
-        embedding_api_key=os.getenv('EMBEDDING_API_KEY', 'sk-custom_key')
+        embedding_api_key=os.getenv('EMBEDDING_API_KEY', 'sk-custom_key'),
     )
     logger.info("Models initialized successfully.")
 except Exception as e:
@@ -92,6 +94,61 @@ async def transcribe_audio(file: UploadFile = File(...)):
         logger.error(f"Error processing audio file {file.filename}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing audio: {e}")
 
+@app.get(
+    "/get_database_name/",
+    summary="Get database_name of RAG system"
+)
+async def get_database_name():
+    """
+    Return HippoRAG working directory
+    
+    :return work_dir: String, working directory of HippoRAG 
+    """
+    return {"message": hipporag.global_config.save_dir}
+
+@app.post(
+    "/index/",
+    summary="Index files for RAG system"
+)
+async def index_files(file: UploadFile = File(...)):
+    """
+    Accepts a zip file, decompresses it, and indexes the contents using HippoRAG.
+    
+    :param file: 
+    """
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_zip_path = temp_file.name
+        
+        extract_dir = Path(file.filename).stem.split('/')[-1]
+        os.makedirs(extract_dir, exist_ok=True)
+        
+        with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_dir)
+        
+        os.unlink(temp_zip_path)
+        
+        global hipporag
+        if extract_dir != hipporag.global_config.save_dir:
+            hipporag = HippoRAG(
+                save_dir=extract_dir,
+                llm_name=os.getenv('LLM_MODEL_NAME'),
+                llm_base_url=os.getenv('LLM_BASE_URL'),
+                llm_api_key=os.getenv('LLM_API_KEY'),
+                embedding_name=os.getenv('EMBEDDING_MODEL_NAME'),
+                embedding_base_url=os.getenv('EMBEDDING_BASE_URL'),
+                embedding_api_key=os.getenv('EMBEDDING_API_KEY', 'sk-custom_key'),
+            )
+        
+        await hipporag.index([os.path.join(extract_dir, extract_dir)])
+        
+        return {"message": "Файлы успешно проиндексированы"}
+    except Exception as e:
+        logger.error(f"Error indexing files: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error indexing files: {e}")
+
 @app.post(
     "/request_processing/",
     response_model=AnswerResponse,
@@ -127,5 +184,5 @@ async def send_response(request_data: InputText):
 
 
 if __name__ == "__main__":
-    host = '0.0.0.0' if os.getenv('IS_DOCKER_RUN') else '127.0.0.1'
+    host = '0.0.0.0'
     uvicorn.run(app, host=host, port=9875)

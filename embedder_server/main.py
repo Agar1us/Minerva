@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     try:
         # Load configuration from environment
-        model_name = os.getenv("EMBEDDING_MODEL", "deepvk/USER-bge-m3")
+        model_name = os.getenv("EMBEDDING_MODEL_NAME", "deepvk/USER-bge-m3")
         device = os.getenv("DEVICE", "cuda")
         engine_type = os.getenv("ENGINE", "torch")
         
@@ -135,5 +135,5 @@ async def health_check() -> dict:
 
 
 if __name__ == "__main__":
-    host = '0.0.0.0' if os.getenv('IS_DOCKER_RUN') else '127.0.0.1'
+    host = '0.0.0.0'
     uvicorn.run(app, host=host, port=8888)

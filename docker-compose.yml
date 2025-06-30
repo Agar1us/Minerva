@@ -26,6 +26,30 @@ services:
       - ml_network
     restart: unless-stopped
 
+  ocr_server:
+    build:
+      context: ./ocr_server
+      dockerfile: dockerfile
+    container_name: ocr_server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ~/.llm_cache:/root/.cache/huggingface
+      - ./models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    networks:
+      - ml_network
+    restart: unless-stopped
+
   api_server:
     build:
       context: ./api_server  
@@ -39,6 +63,7 @@ services:
       - ./api_server:/app
     depends_on:
       - embedder_server
+      - ocr_server
     deploy:
       resources:
         reservations:
@@ -72,3 +97,6 @@ services:
 networks:
   ml_network:
     driver: bridge
+
+volumes:
+  llm_cache:

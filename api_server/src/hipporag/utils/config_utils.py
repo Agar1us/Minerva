@@ -184,7 +184,7 @@ class BaseConfig:
         metadata={"help": "The number of neighboring nodes to explore from a current node during a retrieval step."}
     )
     retrieval_top_k: int = field(
-        default=5,
+        default=3,
         metadata={"help": "The number of documents/nodes to retrieve at each step of the retrieval process."}
     )
     damping: float = field(

@@ -21,3 +21,4 @@ data/
 clear_outputs_and_logs.sh
 
 .infinity_cache/
+small_database/

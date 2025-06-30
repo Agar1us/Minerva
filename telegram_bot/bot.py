@@ -72,7 +72,8 @@ class Minerva:
         self._answer_mode_kb = self._build_answer_mode_keyboard()
         self._register_handlers()
 
-        self.user_modes: Dict[int, str] = {}
+        self.user_answer_mod: Dict[int, str] = {}
+        self.user_states: Dict[int, str] = {}
         logger.info("Бот успешно инициализирован")
 
     def _build_feedback_keyboard(self) -> InlineKeyboardBuilder:
@@ -95,6 +96,7 @@ class Minerva:
         """Registers all message and callback handlers for the dispatcher."""
         self.dp.message.register(self.start_command, Command("start"))
         self.dp.message.register(self.answer_mode_command, Command("answer_mode"))
+        self.dp.message.register(self.indexing_command, Command("indexing"))
         
         self.dp.message.register(self._handle_text, F.text)
         self.dp.message.register(self._handle_voice, F.voice)
@@ -121,6 +123,36 @@ class Minerva:
         markup = self._answer_mode_kb.as_markup()
         await message.answer("Выберите режим ответа:", reply_markup=markup)
 
+    async def indexing_command(self, message: Message):
+        """
+        Processes the /indexing command - prompts the user to send 
+        a ZIP file for indexing and informs them about the current database.
+        
+        :param message: Incoming message.
+        """
+        user_id = message.from_user.id if message.from_user else None
+        if not user_id:
+            return
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(self.rag_url + 'get_database_name/')
+                response.raise_for_status()
+                data = response.json()
+                db_name = data.get("message", "Неизвестно")
+        except Exception as e:
+            logger.error(f"Ошибка при получении имени базы данных: {e}")
+            return "Не удалось получить имя базы данных"
+        
+        self.user_states[user_id] = "waiting_for_zip"
+
+        await message.reply(
+            text=f"Текущая база данных: {db_name}\n\n"
+            "Пожалуйста, отправьте ZIP-файл с документами для индексации.\n"
+            "Если имя файла совпадает с текущим именем базы данных, она будет обновлена.\n"
+            "В противном случае будет создана новая база данных.",
+            parse_mode=None
+        )
+        
     def _get_user_full_name(self, message: Message) -> Optional[str]:
         """
         Safely retrieves the user's full name or username.
@@ -162,11 +194,16 @@ class Minerva:
 
     async def _handle_document(self, message: Message):
         """
-        Handles an incoming document (CSV or Excel) for batch processing.
+        Handles an incoming document (CSV, Excel, ZIP) for processing.
 
         :param message: The incoming message object.
         """
         user_id = message.from_user.id if message.from_user else None
+
+        if self.user_states.get(user_id) == "waiting_for_zip":
+            await self._handle_zip_for_indexing(message)
+            self.user_states.pop(user_id, None)
+            return
 
         content = await self._parse_document(message)
         if content is None:
@@ -210,7 +247,7 @@ class Minerva:
         try:
             full_ans, short_ans, docs = await self._query_api([content])
 
-            mode = self.user_modes.get(user_id, self.DEFAULT_ANSWER_MODE)
+            mode = self.user_answer_mod.get(user_id, self.DEFAULT_ANSWER_MODE)
             answer_text = full_ans[0] if mode == "full" else short_ans[0]
             docs_text = ", ".join(docs[0])
             final_answer = (
@@ -271,7 +308,7 @@ class Minerva:
             return
 
         user_id = callback.from_user.id
-        self.user_modes[user_id] = mode
+        self.user_answer_mod[user_id] = mode
 
         text = "Полный" if mode=='full' else 'Краткий'
         await callback.message.edit_text(
@@ -293,7 +330,7 @@ class Minerva:
         """
         question = {'question': user_content}
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(self.rag_url, json=question)
+            response = await client.post(self.rag_url + 'request_processing/', json=question)
             response.raise_for_status()
             data = response.json()
             
@@ -340,6 +377,50 @@ class Minerva:
             return "Сервис транскрибации временно недоступен."
         except Exception as e:
             return "Что-то пошло не так."
+
+    async def _handle_zip_for_indexing(self, message: Message):
+        """
+        Processes the ZIP file for indexing by sending it to the server.
+        
+        :param message: A message with an attached ZIP file.
+        """
+            
+        file_name = message.document.file_name
+        if not file_name or not file_name.lower().endswith('.zip'):
+            await message.reply("Пожалуйста, отправьте файл с расширением .zip")
+            return
+            
+        placeholder = await message.reply("⏳ Отправка файла на сервер для индексации...")
+        
+        try:
+            file_info = await self.bot.get_file(message.document.file_id)
+            file_data = await self.bot.download_file(file_info.file_path)
+            
+            files = {'file': (file_name, file_data, 'application/zip')}
+            
+            async with httpx.AsyncClient(timeout=3600.0) as client:
+                response = await client.post(self.rag_url + 'index/', files=files)
+                response.raise_for_status()
+                result = response.json()
+                await placeholder.edit_text(f"✅ {result.get('message', 'Индексация завершена успешно.')}")
+                
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Ошибка сервера: {e.response.status_code}"
+            try:
+                error_detail = e.response.json().get('detail', '')
+                if error_detail:
+                    error_msg += f" - {error_detail}"
+            except:
+                pass
+            logger.error(f"HTTP ошибка при индексации: {error_msg}")
+            await placeholder.edit_text(f"❌ {error_msg}")
+        except httpx.RequestError as e:
+            logger.error(f"Ошибка сети при индексации: {e}")
+            await placeholder.edit_text(f"❌ Ошибка сети: {e}")
+        except Exception as e:
+            logger.error(f"Ошибка при индексации: {e}")
+            traceback.print_exc()
+            await placeholder.edit_text(f"❌ Ошибка: {e}")
 
     async def _parse_document(self, message: Message) -> Optional[List[str]]:
         """

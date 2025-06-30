@@ -1,144 +1,137 @@
-import pathlib
-from typing import Callable, Dict, Iterable, List, Union
-
 import os
-import csv
-import fireducks.pandas as pd
-from PyPDF2 import PdfReader
+import pathlib
+from typing import Dict, Iterable, List, Union
+
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import (
+    ApiVlmOptions,
+    ResponseFormat,
+    VlmPipelineOptions,
+)
+from docling.document_converter import (
+    DocumentConverter,
+    PdfFormatOption,
+    ImageFormatOption,
+)
+from docling.pipeline.vlm_pipeline import VlmPipeline
+
 
 # --------------------------------------------------------------------------- #
-# === Per-extension text extractors ========================================= #
+# === Converter configuration =============================================== #
 # --------------------------------------------------------------------------- #
-def _extract_txt(path: pathlib.Path) -> List[str]:
-    """
-    Parses a document (TXT) to extract pure text.
 
-    :param path: Path to a .txt file.
-    :return:     List with a single string – whole file content.
-    """
-    with path.open("r", encoding="utf-8", errors="ignore") as fp:
-        return [fp.read()]
+def build_vlm_options(model: str, prompt: str) -> VlmPipelineOptions:
+    api_opts = ApiVlmOptions(
+        url=os.getenv('OCR_MODEL_URL'),
+        timeout=90,
+        scale=1.0,
+        response_format=ResponseFormat.MARKDOWN,
+        params=dict(model=model),
+        prompt=prompt,
+    )
+    vlm_opts = VlmPipelineOptions(enable_remote_services=True)
+    vlm_opts.vlm_options = api_opts
+    return vlm_opts
 
-def _extract_csv(path: pathlib.Path) -> List[str]:
-    """
-    Parses a document (CSV) to extract row-wise texts.
 
-    :param path: Path to .csv file.
-    :return:     List of strings – one per *row*.
-    """
-    rows: List[str] = []
-    with path.open("r", encoding="utf-8", errors="ignore") as fp:
-        reader = csv.reader(fp)
-        for i, row in enumerate(reader):
-            if i == 0: continue
-            text = " ".join(cell for cell in row if cell.strip())
-            if text:
-                rows.append(text)
-    return rows
+PROMPT = (
+    "Extract the text from the above document as if you were reading it naturally. "
+    "Return the tables in html format. Return the equations in LaTeX representation. "
+    "If there is an image in the document and image caption is not present, add a small "
+    "description of the image inside the <img></img> tag; otherwise, add the image caption "
+    "inside <img></img>. Watermarks should be wrapped in brackets. "
+    "Page numbers should be wrapped in brackets. Prefer using ☐ and ☑ for check boxes."
+)
 
-def _extract_excel(path: pathlib.Path) -> List[str]:
-    """
-    Parses a document (XLSX, XLS) to extract row-wise texts.
+vlm_opts = build_vlm_options(model=os.getenv('OCR_MODEL_NAME'), prompt=PROMPT)
 
-    :param path: Path to an Excel OpenXML file.
-    :return:     List of strings – one per *row* across all sheets.
-    """
-    texts: List[str] = []
-    wb = pd.read_excel(path, sheet_name=None, dtype=str, header=None)
-    for _, df in wb.items():
-        for i, row in enumerate(df.itertuples(index=False)):
-            if i == 0: continue
-            cells = [str(x) for x in row if pd.notna(x) and str(x).strip()]
-            if cells:
-                texts.append(" ".join(cells))
-    return texts
-
-def _extract_pdf(path: pathlib.Path) -> List[str]:
-    """
-    Parses a document (PDF) to extract one big text.
-
-    :param path: Path to a PDF file.
-    :return:     List with a single string – whole pdf text.
-    """
-    reader = PdfReader(str(path))
-    pages = [page.extract_text() or "" for page in reader.pages]
-    return ["\n".join(pages)]
-
-# --------------------------------------------------------------------------- #
-# === Mapping extension and extractor ========================================#
-# --------------------------------------------------------------------------- #
-_EXTRACTORS: Dict[str, Callable[[pathlib.Path], str]] = {
-    ".txt": _extract_txt,
-    ".csv": _extract_csv,
-    ".xls": _extract_excel,
-    ".xlsx": _extract_excel,
-    ".pdf": _extract_pdf,
+FORMAT_OPTIONS: Dict[InputFormat, object] = {
+    InputFormat.PDF: PdfFormatOption(
+        pipeline_cls=VlmPipeline,
+        pipeline_options=vlm_opts,
+    ),
+    InputFormat.IMAGE: ImageFormatOption(
+        pipeline_cls=VlmPipeline,
+        pipeline_options=vlm_opts,
+    ),
 }
 
-_TABLE_EXTS = {".csv", ".xls", ".xlsx"}  # форматы, где нужен row_index
+CONVERTER = DocumentConverter(format_options=FORMAT_OPTIONS)
+
+_TABLE_FORMATS = {InputFormat.CSV, InputFormat.XLSX}
+
 
 # --------------------------------------------------------------------------- #
 # === Core public API ======================================================= #
 # --------------------------------------------------------------------------- #
 def collect_texts(paths: Iterable[Union[str, os.PathLike]]) -> List[str]:
     """
-    Walks through *,txt/ csv/ xls/ xlsx/ pdf* files contained in *paths* and
-    returns a list of strings each consisting of
+    Recursively walks through the supplied *paths* and returns a flat list
+    of strings in the format
 
-        absolute_file_path + "#@$" + raw_file_text
+        <abs_path>[ _<row_idx>].<ext>#@$<raw_text>
 
-    :param paths: An iterable of filesystem paths (files or directories).
-    :return:      A flat list of extracted texts (possibly empty).
+    :param paths: Iterable with file or directory paths.
+    :return:      List with extracted texts (can be empty).
     """
-    results: List[str] = []
+    bucket: List[str] = []
 
-    for root_path in map(pathlib.Path, paths):
-        if root_path.is_file():
-            _handle_file(root_path, results)
-        elif root_path.is_dir():
-            for dirpath, _, filenames in os.walk(root_path):
-                for file_name in filenames:
-                    _handle_file(pathlib.Path(dirpath) / file_name, results)
-        else:
-            # Skip dangling symlinks / non-existent items
-            continue
+    for root in map(pathlib.Path, paths):
+        if root.is_file():
+            _handle_file(root, bucket)
+        elif root.is_dir():
+            for dirpath, _, filenames in os.walk(root):
+                for fname in filenames:
+                    _handle_file(pathlib.Path(dirpath) / fname, bucket)
 
-    return results
+    return bucket
+
 
 # --------------------------------------------------------------------------- #
 # === Helpers =============================================================== # 
 # --------------------------------------------------------------------------- #
+
+def extract_table_rows(table_item):
+    """
+    Extract rows from a TableItem object.
+    
+    :param table_item: A TableItem object containing table data
+    :return: A list of lists, where each inner list represents a row of text cells
+    """
+    cells = table_item.data.table_cells
+    row_indices = sorted(set(cell.start_row_offset_idx for cell in cells))
+    rows = []
+    for row_idx in row_indices:
+        row_cells = [cell for cell in cells if cell.start_row_offset_idx == row_idx]
+        row_cells.sort(key=lambda cell: cell.start_col_offset_idx)
+        row_texts = [cell.text for cell in row_cells if cell.text]
+        rows.append(row_texts)
+    return rows
+
 def _handle_file(path: pathlib.Path, bucket: List[str]) -> None:
     """
-    If *path* has a supported extension, extract its text(s) and append to
-    *bucket* in the required format.
+    Converts *path* with docling and appends the result(s) to *bucket*
+    if the extension is supported.
 
-    :param path:   The concrete file path.
-    :param bucket: Mutable list the results are written into.
+    :param path:   Concrete file path.
+    :param bucket: Mutable list used as an output accumulator.
     """
-    ext = path.suffix.lower()
-    extractor = _EXTRACTORS.get(ext)
-    if extractor is None:
+    try:
+        result = CONVERTER.convert(path)
+    except Exception as exc:
+        print(f"[WARN] Cannot convert '{path}': {exc}")
         return
 
-    try:
-        texts = extractor(path)
-        abs_path, extension = str(path.resolve()).split('.')
+    doc = result.document
+    ext = path.suffix.lstrip(".")
 
-        if ext in _TABLE_EXTS:
-            for idx, txt in enumerate(texts, start=1):
-                if txt:
-                    bucket.append(f"{abs_path}_{idx}.{extension}#@${txt}")
-        else:
-            for txt in texts:
-                if txt:
-                    bucket.append(f"{abs_path}#@${txt}")
-
-    except Exception as exc:
-        print(f"[WARN] Cannot extract '{path}': {exc}")
-
-
-if __name__ == "__main__":
-    ans = []
-    _handle_file(pathlib.Path('test.csv'), ans)
-    print(ans)
+    if path.suffix.lower()[1:] in _TABLE_FORMATS:
+        for table in doc.tables:
+            table_rows = extract_table_rows(table)
+            for idx, row in enumerate(table_rows[1:], start=1):
+                row_text = " ".join(str(cell).strip() for cell in row if cell and str(cell).strip())
+                bucket.append(f"{path.stem}_{idx}.{ext}#@${row_text}")
+    else:
+        text = doc.export_to_text().strip()
+        if text:
+            bucket.append(f"{str(path)}#@${text}")
